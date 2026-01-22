@@ -2225,7 +2225,6 @@ impl<'a> Iterator for LineItemGeneratorIterator<'a> {
 
         // advance next row only when all lines for the order have been produced
         if self.line_number > self.line_count {
-            self.order_date_random.row_finished();
             self.line_count_random.row_finished();
 
             self.quantity_random.row_finished();
