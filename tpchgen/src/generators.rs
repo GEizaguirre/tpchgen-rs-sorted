@@ -1545,6 +1545,22 @@ impl<'a> OrderGenerator<'a> {
         GenerateUtils::calculate_row_count(Self::SCALE_BASE, scale_factor, part, part_count)
     }
 
+    /// Return the total row count for a scale factor (all parts).
+    pub fn total_row_count(scale_factor: f64) -> i64 {
+        (Self::SCALE_BASE as f64 * scale_factor) as i64
+    }
+
+    /// Return a globally ordered order date for the order index.
+    pub fn ordered_order_date(order_index: i64, total_row_count: i64) -> i32 {
+        if total_row_count <= 1 {
+            return Self::ORDER_DATE_MIN;
+        }
+
+        let span = (Self::ORDER_DATE_MAX - Self::ORDER_DATE_MIN + 1) as i64;
+        let offset = ((order_index - 1) * span) / total_row_count;
+        Self::ORDER_DATE_MIN + offset as i32
+    }
+
     /// Returns an iterator over the order rows
     pub fn iter(&self) -> OrderGeneratorIterator<'a> {
         OrderGeneratorIterator::new(
@@ -1597,7 +1613,6 @@ impl<'a> IntoIterator for OrderGenerator<'a> {
 /// Iterator that generates Order rows
 #[derive(Debug)]
 pub struct OrderGeneratorIterator<'a> {
-    order_date_random: RandomBoundedInt,
     line_count_random: RandomBoundedInt,
     customer_key_random: RandomBoundedLong,
     order_priority_random: RandomString<'a>,
@@ -1614,6 +1629,7 @@ pub struct OrderGeneratorIterator<'a> {
     start_index: i64,
     row_count: i64,
     max_customer_key: i64,
+    total_row_count: i64,
 
     index: i64,
 }
@@ -1625,10 +1641,10 @@ impl<'a> OrderGeneratorIterator<'a> {
         start_index: i64,
         row_count: i64,
     ) -> Self {
-        let mut order_date_random = OrderGenerator::create_order_date_random();
         let mut line_count_random = OrderGenerator::create_line_count_random();
 
         let max_customer_key = (CustomerGenerator::SCALE_BASE as f64 * scale_factor) as i64;
+        let total_row_count = OrderGenerator::total_row_count(scale_factor);
 
         let mut customer_key_random =
             RandomBoundedLong::new(851767375, scale_factor >= 30000.0, 1, max_customer_key);
@@ -1654,7 +1670,6 @@ impl<'a> OrderGeneratorIterator<'a> {
         let mut line_ship_date_random = LineItemGenerator::create_ship_date_random();
 
         // Advance all generators to the starting position
-        order_date_random.advance_rows(start_index);
         line_count_random.advance_rows(start_index);
         customer_key_random.advance_rows(start_index);
         order_priority_random.advance_rows(start_index);
@@ -1668,7 +1683,6 @@ impl<'a> OrderGeneratorIterator<'a> {
         line_ship_date_random.advance_rows(start_index);
 
         OrderGeneratorIterator {
-            order_date_random,
             line_count_random,
             customer_key_random,
             order_priority_random,
@@ -1682,6 +1696,7 @@ impl<'a> OrderGeneratorIterator<'a> {
             start_index,
             row_count,
             max_customer_key,
+            total_row_count,
             index: 0,
         }
     }
@@ -1690,7 +1705,7 @@ impl<'a> OrderGeneratorIterator<'a> {
     fn make_order(&mut self, index: i64) -> Order<'a> {
         let order_key = OrderGenerator::make_order_key(index);
 
-        let order_date = self.order_date_random.next_value();
+        let order_date = OrderGenerator::ordered_order_date(index, self.total_row_count);
 
         // generate customer key, taking into account customer mortality rate
         let mut customer_key = self.customer_key_random.next_value();
@@ -1758,7 +1773,6 @@ impl<'a> Iterator for OrderGeneratorIterator<'a> {
 
         let order = self.make_order(self.start_index + self.index + 1);
 
-        self.order_date_random.row_finished();
         self.line_count_random.row_finished();
         self.customer_key_random.row_finished();
         self.order_priority_random.row_finished();
@@ -1998,7 +2012,6 @@ impl<'a> IntoIterator for LineItemGenerator<'a> {
 /// Iterator that generates LineItem rows
 #[derive(Debug)]
 pub struct LineItemGeneratorIterator<'a> {
-    order_date_random: RandomBoundedInt,
     line_count_random: RandomBoundedInt,
 
     quantity_random: RandomBoundedInt,
@@ -2009,7 +2022,6 @@ pub struct LineItemGeneratorIterator<'a> {
 
     supplier_number_random: RandomBoundedInt,
 
-    ship_date_random: RandomBoundedInt,
     commit_date_random: RandomBoundedInt,
     receipt_date_random: RandomBoundedInt,
 
@@ -2022,6 +2034,7 @@ pub struct LineItemGeneratorIterator<'a> {
     scale_factor: f64,
     start_index: i64,
     row_count: i64,
+    total_order_count: i64,
 
     index: i64,
     order_date: i32,
@@ -2037,8 +2050,8 @@ impl<'a> LineItemGeneratorIterator<'a> {
         start_index: i64,
         row_count: i64,
     ) -> Self {
-        let mut order_date_random = OrderGenerator::create_order_date_random();
         let mut line_count_random = OrderGenerator::create_line_count_random();
+        let total_order_count = OrderGenerator::total_row_count(scale_factor);
 
         let mut quantity_random = LineItemGenerator::create_quantity_random();
         let mut discount_random = LineItemGenerator::create_discount_random();
@@ -2053,7 +2066,6 @@ impl<'a> LineItemGeneratorIterator<'a> {
             OrderGenerator::LINE_COUNT_MAX,
         );
 
-        let mut ship_date_random = LineItemGenerator::create_ship_date_random();
         let mut commit_date_random = RandomBoundedInt::new_with_seeds_per_row(
             904914315,
             LineItemGenerator::COMMIT_DATE_MIN,
@@ -2090,7 +2102,6 @@ impl<'a> LineItemGeneratorIterator<'a> {
         );
 
         // Advance all generators to the starting position
-        order_date_random.advance_rows(start_index);
         line_count_random.advance_rows(start_index);
 
         quantity_random.advance_rows(start_index);
@@ -2101,7 +2112,6 @@ impl<'a> LineItemGeneratorIterator<'a> {
 
         supplier_number_random.advance_rows(start_index);
 
-        ship_date_random.advance_rows(start_index);
         commit_date_random.advance_rows(start_index);
         receipt_date_random.advance_rows(start_index);
 
@@ -2112,18 +2122,16 @@ impl<'a> LineItemGeneratorIterator<'a> {
         comment_random.advance_rows(start_index);
 
         // generate information for initial order
-        let order_date = order_date_random.next_value();
+        let order_date = OrderGenerator::ordered_order_date(start_index + 1, total_order_count);
         let line_count = line_count_random.next_value() - 1;
 
         LineItemGeneratorIterator {
-            order_date_random,
             line_count_random,
             quantity_random,
             discount_random,
             tax_random,
             line_part_key_random,
             supplier_number_random,
-            ship_date_random,
             commit_date_random,
             receipt_date_random,
             returned_flag_random,
@@ -2133,6 +2141,7 @@ impl<'a> LineItemGeneratorIterator<'a> {
             scale_factor,
             start_index,
             row_count,
+            total_order_count,
             index: 0,
             order_date,
             line_count,
@@ -2160,8 +2169,7 @@ impl<'a> LineItemGeneratorIterator<'a> {
         let part_price = PartGeneratorIterator::calculate_part_price(part_key);
         let extended_price = part_price * quantity as i64;
 
-        let mut ship_date = self.ship_date_random.next_value();
-        ship_date += self.order_date;
+        let ship_date = self.order_date + LineItemGenerator::SHIP_DATE_MIN;
         let mut commit_date = self.commit_date_random.next_value();
         commit_date += self.order_date;
         let mut receipt_date = self.receipt_date_random.next_value();
@@ -2227,7 +2235,6 @@ impl<'a> Iterator for LineItemGeneratorIterator<'a> {
             self.line_part_key_random.row_finished();
             self.supplier_number_random.row_finished();
 
-            self.ship_date_random.row_finished();
             self.commit_date_random.row_finished();
             self.receipt_date_random.row_finished();
 
@@ -2241,7 +2248,10 @@ impl<'a> Iterator for LineItemGeneratorIterator<'a> {
 
             // generate information for next order
             self.line_count = self.line_count_random.next_value() - 1;
-            self.order_date = self.order_date_random.next_value();
+            self.order_date = OrderGenerator::ordered_order_date(
+                self.start_index + self.index + 1,
+                self.total_order_count,
+            );
             self.line_number = 0;
         }
 
