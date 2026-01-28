@@ -197,6 +197,22 @@ impl GenerationPlan {
     pub fn chunk_count(&self) -> usize {
         self.part_list.clone().count()
     }
+
+    /// Calculate the number of partitions needed to achieve a target part size
+    pub fn calculate_part_count(
+        table: Table,
+        format: OutputFormat,
+        scale_factor: f64,
+        parquet_row_group_bytes: i64,
+        part_size: i64,
+    ) -> i32 {
+        let mut output_size = OutputSize::new(table, scale_factor, format, parquet_row_group_bytes);
+        output_size.target_chunk_size_bytes = part_size;
+        // we don't want to limit by 32k row groups here because this is for the number of files,
+        // not row groups within a file.
+        output_size.max_part_count = None;
+        output_size.part_count()
+    }
 }
 
 /// Converts the `GenerationPlan` into an iterator of (part_number, num_parts)

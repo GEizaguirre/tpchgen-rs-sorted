@@ -232,6 +232,9 @@ pub struct GeneratorConfig {
     pub parts: Option<i32>,
     /// Specific partition to generate (1-based, requires parts to be set)
     pub part: Option<i32>,
+    /// Target size in bytes for each part/file. If specified, the number of parts
+    /// will be calculated based on the total table size.
+    pub part_size: Option<i64>,
     /// Write output to stdout instead of files
     pub stdout: bool,
 }
@@ -248,6 +251,7 @@ impl Default for GeneratorConfig {
             parquet_row_group_bytes: DEFAULT_PARQUET_ROW_GROUP_BYTES,
             parts: None,
             part: None,
+            part_size: None,
             stdout: false,
         }
     }
@@ -370,6 +374,7 @@ impl TpchGenerator {
             config.scale_factor,
             config.parquet_compression,
             config.parquet_row_group_bytes,
+            config.part_size,
             config.stdout,
             config.output_dir,
         );
@@ -509,6 +514,12 @@ impl TpchGeneratorBuilder {
     /// Set the specific partition to generate (1-based, requires parts to be set)
     pub fn with_part(mut self, part: i32) -> Self {
         self.config.part = Some(part);
+        self
+    }
+
+    /// Set the target size for each part/file
+    pub fn with_part_size(mut self, bytes: i64) -> Self {
+        self.config.part_size = Some(bytes);
         self
     }
 

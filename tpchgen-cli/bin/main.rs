@@ -62,12 +62,16 @@ struct Cli {
     tables: Option<Vec<Table>>,
 
     /// Number of part(itions) to generate. If not specified creates a single file per table
-    #[arg(short, long)]
+    #[arg(short, long, conflicts_with = "part_size")]
     parts: Option<i32>,
 
     /// Which part(ition) to generate (1-based). If not specified, generates all parts
     #[arg(long)]
     part: Option<i32>,
+
+    /// Target size for each part/file (e.g. 1GB, 500MB, 10MB)
+    #[arg(long, value_parser = parse_size, conflicts_with = "parts")]
+    part_size: Option<i64>,
 
     /// Output format: tbl, csv, parquet
     #[arg(short, long, default_value = "tbl")]
@@ -223,8 +227,41 @@ impl Cli {
         if let Some(part) = self.part {
             builder = builder.with_part(part);
         }
+        if let Some(part_size) = self.part_size {
+            builder = builder.with_part_size(part_size);
+        }
 
         // Generate using the library
         builder.build().generate().await
     }
+}
+
+fn parse_size(s: &str) -> Result<i64, String> {
+    let s = s.trim().to_uppercase();
+    if s.is_empty() {
+        return Err("Empty size".to_string());
+    }
+
+    let mut units = 1i64;
+    let mut num_str = s.as_str();
+
+    if s.ends_with("GB") || s.ends_with("G") {
+        units = 1024 * 1024 * 1024;
+        num_str = s.trim_end_matches("GB").trim_end_matches('G');
+    } else if s.ends_with("MB") || s.ends_with("M") {
+        units = 1024 * 1024;
+        num_str = s.trim_end_matches("MB").trim_end_matches('M');
+    } else if s.ends_with("KB") || s.ends_with("K") {
+        units = 1024;
+        num_str = s.trim_end_matches("KB").trim_end_matches('K');
+    } else if s.ends_with("B") {
+        units = 1;
+        num_str = s.trim_end_matches('B');
+    }
+
+    num_str
+        .trim()
+        .parse::<f64>()
+        .map(|n| (n * units as f64) as i64)
+        .map_err(|e| format!("Invalid size '{}': {}", s, e))
 }

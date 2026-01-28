@@ -127,6 +127,7 @@ pub struct OutputPlanGenerator {
     scale_factor: f64,
     parquet_compression: Compression,
     parquet_row_group_bytes: i64,
+    part_size: Option<i64>,
     stdout: bool,
     output_dir: PathBuf,
     /// The generated output plans
@@ -142,6 +143,7 @@ impl OutputPlanGenerator {
         scale_factor: f64,
         parquet_compression: Compression,
         parquet_row_group_bytes: i64,
+        part_size: Option<i64>,
         stdout: bool,
         output_dir: PathBuf,
     ) -> Self {
@@ -150,6 +152,7 @@ impl OutputPlanGenerator {
             scale_factor,
             parquet_compression,
             parquet_row_group_bytes,
+            part_size,
             stdout,
             output_dir,
             output_plans: Vec::new(),
@@ -164,10 +167,23 @@ impl OutputPlanGenerator {
         cli_part: Option<i32>,
         cli_part_count: Option<i32>,
     ) -> io::Result<()> {
-        // If the user specified only a part count, automatically create all
-        // partitions for the table
-        if let (None, Some(part_count)) = (cli_part, cli_part_count) {
+        // If the user specified only a part count or part size, automatically
+        // create all partitions for the table
+        if cli_part.is_none() && (cli_part_count.is_some() || self.part_size.is_some()) {
             if GenerationPlan::partitioned_table(table) {
+                let part_count = if let Some(part_count) = cli_part_count {
+                    part_count
+                } else {
+                    // calculate part count from part size
+                    GenerationPlan::calculate_part_count(
+                        table,
+                        self.format,
+                        self.scale_factor,
+                        self.parquet_row_group_bytes,
+                        self.part_size.unwrap(),
+                    )
+                };
+
                 debug!("Generating all partitions for table {table} with part count {part_count}");
                 for part in 1..=part_count {
                     self.generate_plan_inner(table, Some(part), Some(part_count))?;
@@ -178,6 +194,19 @@ impl OutputPlanGenerator {
                 self.generate_plan_inner(table, Some(1), Some(1))?;
             }
         } else {
+            // we have to handle the case where cli_part is specified but cli_part_count is not.
+            // If part_size is specified, we can calculate the part_count
+            let cli_part_count = if cli_part_count.is_none() && self.part_size.is_some() {
+                Some(GenerationPlan::calculate_part_count(
+                    table,
+                    self.format,
+                    self.scale_factor,
+                    self.parquet_row_group_bytes,
+                    self.part_size.unwrap(),
+                ))
+            } else {
+                cli_part_count
+            };
             self.generate_plan_inner(table, cli_part, cli_part_count)?;
         }
         Ok(())
