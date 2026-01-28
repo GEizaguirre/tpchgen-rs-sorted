@@ -112,6 +112,10 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     stdout: bool,
 
+    /// Estimate the total size of the generated data without generating it
+    #[arg(long, default_value_t = false)]
+    estimate_size: bool,
+
     /// Target size in row group bytes in Parquet files
     ///
     /// Row groups are the typical unit of parallel processing and compression
@@ -203,6 +207,27 @@ impl Cli {
             if self.parquet_row_group_bytes != DEFAULT_PARQUET_ROW_GROUP_BYTES {
                 log::warn!("Parquet row group size option set but not generating Parquet files");
             }
+        }
+
+        if self.estimate_size {
+            let tables = self.tables.clone().unwrap_or(vec![
+                Table::Nation,
+                Table::Region,
+                Table::Part,
+                Table::Supplier,
+                Table::Partsupp,
+                Table::Customer,
+                Table::Orders,
+                Table::Lineitem,
+            ]);
+            let total_size = tpchgen_cli::GenerationPlan::estimate_total_size(
+                &tables,
+                self.scale_factor,
+                self.format,
+                self.parquet_row_group_bytes,
+            );
+            println!("{}", total_size);
+            return Ok(());
         }
 
         // Build the generator using the library API

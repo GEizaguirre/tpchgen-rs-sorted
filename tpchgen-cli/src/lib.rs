@@ -232,8 +232,7 @@ pub struct GeneratorConfig {
     pub parts: Option<i32>,
     /// Specific partition to generate (1-based, requires parts to be set)
     pub part: Option<i32>,
-    /// Target size in bytes for each part/file. If specified, the number of parts
-    /// will be calculated based on the total table size.
+    /// Size in bytes for each file
     pub part_size: Option<i64>,
     /// Write output to stdout instead of files
     pub stdout: bool,

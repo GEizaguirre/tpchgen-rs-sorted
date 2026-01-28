@@ -198,7 +198,7 @@ impl GenerationPlan {
         self.part_list.clone().count()
     }
 
-    /// Calculate the number of partitions needed to achieve a target part size
+    /// Calculate the number of partitions needed to achieve a part size
     pub fn calculate_part_count(
         table: Table,
         format: OutputFormat,
@@ -212,6 +212,22 @@ impl GenerationPlan {
         // not row groups within a file.
         output_size.max_part_count = None;
         output_size.part_count()
+    }
+
+    /// Estimate the total size in bytes for a set of tables
+    pub fn estimate_total_size(
+        tables: &[Table],
+        scale_factor: f64,
+        format: OutputFormat,
+        parquet_row_group_bytes: i64,
+    ) -> i64 {
+        tables
+            .iter()
+            .map(|&table| {
+                OutputSize::new(table, scale_factor, format, parquet_row_group_bytes)
+                    .total_size_bytes()
+            })
+            .sum()
     }
 }
 
@@ -236,15 +252,15 @@ impl Display for GenerationPlan {
 
 /// output size of a table
 #[derive(Debug)]
-struct OutputSize {
+pub struct OutputSize {
     /// Average row size in bytes
-    avg_row_size_bytes: i64,
+    pub avg_row_size_bytes: i64,
     /// Number of rows in the table
-    row_count: i64,
+    pub row_count: i64,
     /// output target chunk size in bytes
-    target_chunk_size_bytes: i64,
+    pub target_chunk_size_bytes: i64,
     /// maximum part count, if any
-    max_part_count: Option<i64>,
+    pub max_part_count: Option<i64>,
 }
 
 impl OutputSize {
@@ -313,6 +329,11 @@ impl OutputSize {
             target_chunk_size_bytes,
             max_part_count,
         }
+    }
+
+    /// Return the total size in bytes of the table
+    pub fn total_size_bytes(&self) -> i64 {
+        self.row_count * self.avg_row_size_bytes
     }
 
     /// Return the number of parts to generate

@@ -44,9 +44,6 @@ def run_benchmark(sf, part_size, num_threads=None):
     results = []
     current_file = None
     
-    # Sample line: [2026-01-28T12:31:07Z INFO  tpchgen_cli::runner] Writing table lineitem (SF=10, 524 chunks) to lineitem.1.parquet using 16 threads
-    # Sample line: [2026-01-28T12:31:15Z INFO  tpchgen_cli::statistics] Created 2.17 GB in 7.41092311s (0.29 GB/sec)
-    
     writing_re = re.compile(r"Writing table (\w+) .* to (.*) using")
     stats_re = re.compile(r"Created ([\d.]+) (GB|MB|KB|B) in ([\d.]+)(s|ms) \(([\d.]+) GB/sec\)")
 
